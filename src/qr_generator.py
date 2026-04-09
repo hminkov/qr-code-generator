@@ -1,8 +1,10 @@
 """
-Wedding QR Code Generator
-Generates beautiful QR codes with rounded corners, circular dots, and logo support.
+QR Code Generator
+Generates styled QR codes with rounded corners, circular dots, and logo support.
+Each generate() call is stateless; exclusion_zone is per-instance.
 """
 
+import io
 import qrcode
 from qrcode.image.styledpil import StyledPilImage
 from qrcode.image.styles.moduledrawers import CircleModuleDrawer, RoundedModuleDrawer
@@ -11,6 +13,7 @@ from qrcode.image.styles.colormasks import SolidFillColorMask
 from qrcode.compat.pil import Image as QRImage, ImageDraw as QRImageDraw
 from PIL import Image, ImageDraw, ImageFilter
 import os
+from typing import Optional, Tuple
 
 # Antialiasing factor for smoother circles
 ANTIALIASING_FACTOR = 4
@@ -18,22 +21,17 @@ ANTIALIASING_FACTOR = 4
 
 class CustomCircleDrawer(StyledPilQRModuleDrawer):
     """Circle drawer with configurable dot size and logo exclusion zone."""
-    
-    # Class-level exclusion zone (set before generating)
-    exclusion_zone = None  # (center_x, center_y, radius)
-    
-    def __init__(self, size_ratio: float = 0.9):
+
+    def __init__(self, size_ratio: float = 0.9, exclusion_zone: Optional[Tuple[float, float, float]] = None):
         """
         Args:
             size_ratio: Size of dots relative to module (0.1-1.5)
-                       0.5 = small dots with gaps
-                       0.9 = default, slight gaps
-                       1.0 = dots touch each other
-                       1.2-1.5 = overlapping dots (bolder look)
+            exclusion_zone: Optional (center_x, center_y, radius) to skip dots inside logo area
         """
         super().__init__()
         self.size_ratio = max(0.1, min(1.5, size_ratio))
         self.circle = None
+        self.exclusion_zone = exclusion_zone
     
     def initialize(self, *args, **kwargs):
         super().initialize(*args, **kwargs)
@@ -61,15 +59,12 @@ class CustomCircleDrawer(StyledPilQRModuleDrawer):
     
     def _is_in_exclusion_zone(self, box):
         """Check if dot center is within the exclusion zone."""
-        if CustomCircleDrawer.exclusion_zone is None:
+        if self.exclusion_zone is None:
             return False
-        
-        center_x, center_y, radius = CustomCircleDrawer.exclusion_zone
-        # Calculate dot center
+
+        center_x, center_y, radius = self.exclusion_zone
         dot_center_x = (box[0][0] + box[1][0]) / 2
         dot_center_y = (box[0][1] + box[1][1]) / 2
-        
-        # Check if dot center is within the circular exclusion zone
         distance = ((dot_center_x - center_x) ** 2 + (dot_center_y - center_y) ** 2) ** 0.5
         return distance < radius
     
@@ -83,17 +78,16 @@ class CustomCircleDrawer(StyledPilQRModuleDrawer):
 
 class CustomRoundedDrawer(StyledPilQRModuleDrawer):
     """Rounded square drawer with configurable size and logo exclusion zone."""
-    
-    # Class-level exclusion zone (set before generating)
-    exclusion_zone = None  # (center_x, center_y, radius)
-    
-    def __init__(self, size_ratio: float = 0.9):
+
+    def __init__(self, size_ratio: float = 0.9, exclusion_zone: Optional[Tuple[float, float, float]] = None):
         """
         Args:
             size_ratio: Size of squares relative to module (0.1-1.5)
+            exclusion_zone: Optional (center_x, center_y, radius) to skip dots inside logo area
         """
         super().__init__()
         self.size_ratio = max(0.1, min(1.5, size_ratio))
+        self.exclusion_zone = exclusion_zone
     
     def initialize(self, *args, **kwargs):
         super().initialize(*args, **kwargs)
@@ -102,13 +96,12 @@ class CustomRoundedDrawer(StyledPilQRModuleDrawer):
     
     def _is_in_exclusion_zone(self, box):
         """Check if dot center is within the exclusion zone."""
-        if CustomRoundedDrawer.exclusion_zone is None:
+        if self.exclusion_zone is None:
             return False
-        
-        center_x, center_y, radius = CustomRoundedDrawer.exclusion_zone
+
+        center_x, center_y, radius = self.exclusion_zone
         dot_center_x = (box[0][0] + box[1][0]) / 2
         dot_center_y = (box[0][1] + box[1][1]) / 2
-        
         distance = ((dot_center_x - center_x) ** 2 + (dot_center_y - center_y) ** 2) ** 0.5
         return distance < radius
     
@@ -124,6 +117,68 @@ class CustomRoundedDrawer(StyledPilQRModuleDrawer):
             size = smaller_box[2] - smaller_box[0]
             radius = size * 0.3  # 30% corner radius
             self.imgDraw.rounded_rectangle(smaller_box, radius=radius, fill=self.img.paint_color)
+
+
+class CustomDiamondDrawer(StyledPilQRModuleDrawer):
+    """Diamond-shaped dot drawer with logo exclusion zone."""
+
+    def __init__(self, size_ratio: float = 0.9, exclusion_zone: Optional[Tuple[float, float, float]] = None):
+        super().__init__()
+        self.size_ratio = max(0.1, min(1.5, size_ratio))
+        self.exclusion_zone = exclusion_zone
+
+    def initialize(self, *args, **kwargs):
+        super().initialize(*args, **kwargs)
+        self.imgDraw = QRImageDraw.Draw(self.img._img)
+        self.delta = (1 - self.size_ratio) * self.img.box_size / 2
+
+    def _is_in_exclusion_zone(self, box):
+        if self.exclusion_zone is None:
+            return False
+        center_x, center_y, radius = self.exclusion_zone
+        dot_center_x = (box[0][0] + box[1][0]) / 2
+        dot_center_y = (box[0][1] + box[1][1]) / 2
+        distance = ((dot_center_x - center_x) ** 2 + (dot_center_y - center_y) ** 2) ** 0.5
+        return distance < radius
+
+    def drawrect(self, box, is_active: bool):
+        if is_active and not self._is_in_exclusion_zone(box):
+            cx = (box[0][0] + box[1][0]) / 2
+            cy = (box[0][1] + box[1][1]) / 2
+            half = (box[1][0] - box[0][0]) * self.size_ratio / 2
+            points = [(cx, cy - half), (cx + half, cy), (cx, cy + half), (cx - half, cy)]
+            self.imgDraw.polygon(points, fill=self.img.paint_color)
+
+
+class CustomSquareDrawer(StyledPilQRModuleDrawer):
+    """Clean square dot drawer with logo exclusion zone."""
+
+    def __init__(self, size_ratio: float = 0.9, exclusion_zone: Optional[Tuple[float, float, float]] = None):
+        super().__init__()
+        self.size_ratio = max(0.1, min(1.5, size_ratio))
+        self.exclusion_zone = exclusion_zone
+
+    def initialize(self, *args, **kwargs):
+        super().initialize(*args, **kwargs)
+        self.imgDraw = QRImageDraw.Draw(self.img._img)
+        self.delta = (1 - self.size_ratio) * self.img.box_size / 2
+
+    def _is_in_exclusion_zone(self, box):
+        if self.exclusion_zone is None:
+            return False
+        center_x, center_y, radius = self.exclusion_zone
+        dot_center_x = (box[0][0] + box[1][0]) / 2
+        dot_center_y = (box[0][1] + box[1][1]) / 2
+        distance = ((dot_center_x - center_x) ** 2 + (dot_center_y - center_y) ** 2) ** 0.5
+        return distance < radius
+
+    def drawrect(self, box, is_active: bool):
+        if is_active and not self._is_in_exclusion_zone(box):
+            self.imgDraw.rectangle(
+                [box[0][0] + self.delta, box[0][1] + self.delta,
+                 box[1][0] - self.delta, box[1][1] - self.delta],
+                fill=self.img.paint_color
+            )
 
 
 class WeddingQRGenerator:
@@ -144,10 +199,42 @@ class WeddingQRGenerator:
     def __init__(self):
         self.qr = None
         
-    def _hex_to_rgb(self, hex_color: str) -> tuple:
+    def _hex_to_rgb(self, hex_color: str) -> Tuple[int, int, int]:
         """Convert hex color to RGB tuple."""
         hex_color = hex_color.lstrip('#')
         return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+
+    def _resolve_color(self, color: str) -> Tuple[int, int, int]:
+        """Resolve color name or hex string to RGB tuple."""
+        if color in self.COLOR_PRESETS:
+            return self._hex_to_rgb(self.COLOR_PRESETS[color])
+        return self._hex_to_rgb(color)
+
+    def _build_qr_code(self, data: str, error_correction: str, version: Optional[int], size: int):
+        """Build QRCode object with optimal box_size for target output size."""
+        ec_levels = {
+            'L': qrcode.constants.ERROR_CORRECT_L,
+            'M': qrcode.constants.ERROR_CORRECT_M,
+            'Q': qrcode.constants.ERROR_CORRECT_Q,
+            'H': qrcode.constants.ERROR_CORRECT_H,
+        }
+        ec = ec_levels.get(error_correction.upper(), qrcode.constants.ERROR_CORRECT_H)
+        qr_version = max(1, min(40, int(version))) if version is not None else None
+
+        # First pass to determine module count
+        qr = qrcode.QRCode(version=qr_version, error_correction=ec, box_size=10, border=2)
+        qr.add_data(data)
+        qr.make(fit=True)
+
+        # Calculate optimal box_size for high quality output
+        modules = qr.modules_count
+        optimal_box_size = max(30, size // (modules + 4))
+
+        # Recreate with optimal box size
+        qr = qrcode.QRCode(version=qr_version, error_correction=ec, box_size=optimal_box_size, border=2)
+        qr.add_data(data)
+        qr.make(fit=True)
+        return qr
     
     def _create_rounded_finder_pattern(self, size: int, color: tuple, bg_color: tuple = (255, 255, 255)) -> Image.Image:
         """Create a single rounded finder pattern (the big corner squares)."""
@@ -182,188 +269,123 @@ class WeddingQRGenerator:
         
         return img
     
-    def generate(
-        self,
-        data: str,
-        output_path: str = "qr_code.png",
-        logo_path: str = None,
-        color: str = "navy",
-        background_color: str = "#FFFFFF",
-        size: int = 1000,
-        logo_size_ratio: float = 0.25,
-        logo_padding: float = 0.03,  # Padding around logo as ratio of QR size
-        style: str = "circles",  # "circles" or "rounded"
-        error_correction: str = "H",  # L, M, Q, H (H allows up to 30% obstruction)
-        dot_size: float = 0.9,  # Dot size ratio (0.1-1.0)
-        version: int = None  # QR version 1-40 (controls density), None=auto
-    ) -> str:
+    def generate(self, request=None, **kwargs):
         """
-        Generate a styled QR code.
-        
-        Args:
-            data: The URL or text to encode
-            output_path: Where to save the QR code
-            logo_path: Path to logo image (optional)
-            color: Color name from presets or hex code
-            background_color: Background color (hex)
-            size: Output image size in pixels
-            logo_size_ratio: Logo size as ratio of QR code (0.2-0.3 recommended)
-            style: "circles" for circular dots, "rounded" for rounded squares
-            error_correction: Error correction level (H recommended for logos)
-            dot_size: Size of dots/modules (0.1-1.0, where 1.0 means dots touch)
-            version: QR code version 1-40 (1=21x21 dots, 10=57x57, 40=177x177). None=auto minimum.
-            
+        Generate a styled QR code and return PNG bytes.
+
+        Accepts a QRRequest instance, or falls back to keyword arguments for
+        backward-compatible callers.
+
         Returns:
-            Path to the generated QR code image
+            QRResult with PNG image bytes and image dimensions.
         """
-        # Resolve color
-        if color in self.COLOR_PRESETS:
-            qr_color = self._hex_to_rgb(self.COLOR_PRESETS[color])
-        else:
-            qr_color = self._hex_to_rgb(color)
-            
-        bg_color = self._hex_to_rgb(background_color)
-        
-        # Error correction levels
-        ec_levels = {
-            'L': qrcode.constants.ERROR_CORRECT_L,  # ~7% recovery
-            'M': qrcode.constants.ERROR_CORRECT_M,  # ~15% recovery
-            'Q': qrcode.constants.ERROR_CORRECT_Q,  # ~25% recovery
-            'H': qrcode.constants.ERROR_CORRECT_H,  # ~30% recovery
-        }
-        
-        # Validate and clamp version if provided
-        qr_version = None
-        if version is not None:
-            qr_version = max(1, min(40, int(version)))
-        
-        # Create QR code - first pass to determine module count
-        qr = qrcode.QRCode(
-            version=qr_version,
-            error_correction=ec_levels.get(error_correction.upper(), qrcode.constants.ERROR_CORRECT_H),
-            box_size=10,  # Temporary
-            border=2,
+        try:
+            from models import QRRequest, QRResult
+        except ImportError:
+            from .models import QRRequest, QRResult
+
+        if request is None:
+            request = QRRequest(**kwargs)
+
+        qr_color = self._resolve_color(request.color)
+        bg_color = self._hex_to_rgb(request.background_color)
+
+        qr = self._build_qr_code(
+            request.data, request.error_correction, request.version, request.size
         )
-        qr.add_data(data)
-        qr.make(fit=True)
-        
-        # Calculate optimal box_size for high quality output
-        # We want at least 'size' pixels, so box_size = size / (modules + border*2)
-        modules = qr.modules_count
-        # Use larger box_size for crisp circles (at least 30px per module for good antialiasing)
-        optimal_box_size = max(30, size // (modules + 4))
-        
-        # Recreate with optimal box size
-        qr = qrcode.QRCode(
-            version=qr_version,
-            error_correction=ec_levels.get(error_correction.upper(), qrcode.constants.ERROR_CORRECT_H),
-            box_size=optimal_box_size,
-            border=2,
-        )
-        qr.add_data(data)
-        qr.make(fit=True)
-        
-        # Report actual version used
-        print(f"📊 Density: Version {qr.version} ({qr.modules_count}x{qr.modules_count} modules)")
-        
-        # Calculate exclusion zone for logo (if logo will be added)
-        # This tells the drawer to skip dots in this area
-        if logo_path and os.path.exists(logo_path):
-            # Calculate the generated image size
-            generated_size = (qr.modules_count + 4) * optimal_box_size
+
+        print(f"Density: Version {qr.version} ({qr.modules_count}x{qr.modules_count} modules)")
+
+        # Calculate exclusion zone for logo (passed per-instance, not class-level)
+        exclusion_zone = None
+        if request.logo_path and os.path.exists(request.logo_path):
+            generated_size = (qr.modules_count + 4) * qr.box_size
             center = generated_size / 2
-            # Exclusion radius = logo size + padding
-            exclusion_radius = (generated_size * logo_size_ratio / 2) + (generated_size * logo_padding)
-            CustomCircleDrawer.exclusion_zone = (center, center, exclusion_radius)
-            CustomRoundedDrawer.exclusion_zone = (center, center, exclusion_radius)
-        else:
-            CustomCircleDrawer.exclusion_zone = None
-            CustomRoundedDrawer.exclusion_zone = None
-        
-        # Choose style with custom dot size
-        if style == "circles":
-            module_drawer = CustomCircleDrawer(size_ratio=dot_size)
-        else:
-            module_drawer = CustomRoundedDrawer(size_ratio=dot_size)
-        
-        # Generate styled image
+            exclusion_radius = (
+                (generated_size * request.logo_size_ratio / 2)
+                + (generated_size * request.logo_padding)
+            )
+            exclusion_zone = (center, center, exclusion_radius)
+
+        style_map = {
+            "circles": CustomCircleDrawer,
+            "rounded": CustomRoundedDrawer,
+            "diamond": CustomDiamondDrawer,
+            "square": CustomSquareDrawer,
+        }
+        drawer_cls = style_map.get(request.style, CustomCircleDrawer)
+        module_drawer = drawer_cls(size_ratio=request.dot_size, exclusion_zone=exclusion_zone)
+
         img = qr.make_image(
             image_factory=StyledPilImage,
             module_drawer=module_drawer,
             color_mask=SolidFillColorMask(
                 back_color=bg_color,
-                front_color=qr_color
+                front_color=qr_color,
             )
         )
-        
-        # Convert to RGBA for processing
+
         img = img.convert('RGBA')
-        
-        # Get current size and resize to exact target size
+
         current_size = img.size[0]
-        if current_size != size:
-            img = img.resize((size, size), Image.Resampling.LANCZOS)
-        
+        if current_size != request.size:
+            img = img.resize((request.size, request.size), Image.Resampling.LANCZOS)
+
         # Calculate finder pattern positions and size
-        # QR code structure: border + 7 modules for finder pattern
-        modules = qr.modules_count
-        module_size = size / (modules + 4)  # +4 for border
+        module_size = request.size / (qr.modules_count + 4)
         finder_size = int(7 * module_size)
         border_offset = int(2 * module_size)
-        
-        # Clear the finder pattern areas first (erase underlying dots)
-        # Add small padding to ensure complete coverage
+
         padding = int(module_size * 0.5)
         draw = ImageDraw.Draw(img)
-        
+
         # Clear top-left
         draw.rectangle(
-            [border_offset - padding, border_offset - padding, 
+            [border_offset - padding, border_offset - padding,
              border_offset + finder_size + padding, border_offset + finder_size + padding],
             fill=bg_color + (255,)
         )
-        
+
         # Clear top-right
-        top_right_x = size - border_offset - finder_size
+        top_right_x = request.size - border_offset - finder_size
         draw.rectangle(
             [top_right_x - padding, border_offset - padding,
              top_right_x + finder_size + padding, border_offset + finder_size + padding],
             fill=bg_color + (255,)
         )
-        
+
         # Clear bottom-left
-        bottom_left_y = size - border_offset - finder_size
+        bottom_left_y = request.size - border_offset - finder_size
         draw.rectangle(
             [border_offset - padding, bottom_left_y - padding,
              border_offset + finder_size + padding, bottom_left_y + finder_size + padding],
             fill=bg_color + (255,)
         )
-        
+
         # Create and paste custom rounded finder patterns
         finder = self._create_rounded_finder_pattern(finder_size, qr_color, bg_color)
-        
-        # Top-left finder pattern
+
         img.paste(finder, (border_offset, border_offset), finder)
-        
-        # Top-right finder pattern
         img.paste(finder, (top_right_x, border_offset), finder)
-        
-        # Bottom-left finder pattern
         img.paste(finder, (border_offset, bottom_left_y), finder)
-        
-        # Add logo if provided
-        if logo_path and os.path.exists(logo_path):
-            img = self._add_logo(img, logo_path, logo_size_ratio, bg_color, logo_padding)
-        
-        # Convert to RGB for saving (removes alpha channel)
+
+        if request.logo_path and os.path.exists(request.logo_path):
+            img = self._add_logo(img, request.logo_path, request.logo_size_ratio, bg_color, request.logo_padding)
+
+        # Composite RGBA onto RGB before PNG encode
         final_img = Image.new('RGB', img.size, bg_color)
         final_img.paste(img, mask=img.split()[3] if img.mode == 'RGBA' else None)
-        
-        # Save
-        final_img.save(output_path, 'PNG', quality=95)
-        print(f"✨ QR code saved to: {output_path}")
-        
-        return output_path
+
+        buf = io.BytesIO()
+        final_img.save(buf, 'PNG', quality=95)
+        image_bytes = buf.getvalue()
+
+        return QRResult(
+            image_bytes=image_bytes,
+            content_type="image/png",
+            width=final_img.width,
+            height=final_img.height,
+        )
     
     def _add_logo(
         self, 

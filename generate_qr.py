@@ -18,6 +18,7 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
 from qr_generator import WeddingQRGenerator
+from models import QRRequest
 
 CONFIG_FILE = os.path.join(os.path.dirname(__file__), 'config.json')
 OUTPUT_DIR = os.path.join(os.path.dirname(__file__), 'output')
@@ -181,9 +182,8 @@ Edit config.json to set your defaults!
     print()
     
     try:
-        generator.generate(
+        request = QRRequest(
             data=args.url,
-            output_path=args.output,
             logo_path=args.logo,
             color=args.color,
             background_color=args.background,
@@ -193,9 +193,13 @@ Edit config.json to set your defaults!
             style=args.style,
             error_correction=args.error_correction,
             dot_size=args.dot_size,
-            version=args.version
+            version=args.version,
         )
-        
+        result = generator.generate(request)
+        with open(args.output, 'wb') as f:
+            f.write(result.image_bytes)
+        print(f"✨ QR code saved to: {args.output}")
+
         print("\n✅ Success! Your QR code is ready.")
         print("📱 Test it with your phone camera before printing!\n")
         

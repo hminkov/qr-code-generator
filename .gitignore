@@ -4,3 +4,10 @@ output/*.png
 __pycache__/
 *.pyc
 .env
+.env.local
+data/
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/.env.local
+.pytest_cache/
