@@ -1,139 +1,189 @@
-# 🎊 Wedding QR Code Generator
+# QR Code Designer
 
-Generate beautiful, customizable QR codes with rounded corners, circular dots, and logo support - perfect for wedding invitations!
+Design print-ready QR codes with custom dot styles, colors, and logo overlay. Built for wedding invitations, event stationery, and business cards.
 
-![Example QR Code](output/example.png)
+## Features
 
-## ✨ Features
+- **4 dot styles**: Circles, rounded squares, diamonds, and clean squares
+- **8 color presets**: Navy, Gold, Rose Gold, Burgundy, Sage, Dusty Blue, Black, Charcoal
+- **Custom colors**: Any hex color via CLI or web UI
+- **Logo overlay**: Upload a monogram or crest — dots clear automatically around it
+- **Print quality**: Up to 2000px with 4x antialiased rendering (300 DPI at ~7 inches)
+- **No watermarks**: Free tier produces clean 500px PNG, no branding
+- **Live preview**: Web UI renders server-side preview on every parameter change
+- **Concurrent-safe**: Each generate() call is stateless — safe for web server use
 
-- **Stylish Design**: Circular dots and rounded finder patterns (like modern QR codes)
-- **Logo Support**: Add your monogram, wedding logo, or any image to the center
-- **Color Presets**: Beautiful wedding-appropriate colors (navy, rose gold, sage, etc.)
-- **Custom Colors**: Use any hex color you want
-- **High Quality**: Generates high-resolution PNG images
-- **100% Free**: Uses open-source libraries only
+## Quick Start
 
-## 🚀 Quick Start
-
-### 1. Install Dependencies
+### CLI
 
 ```bash
 pip install -r requirements.txt
-```
 
-### 2. Generate Your QR Code
-
-**Basic (no logo):**
-
-```bash
+# Basic
 python generate_qr.py --url "https://yourwedding.com/rsvp"
+
+# With options
+python generate_qr.py \
+  --url "https://yourwedding.com/rsvp" \
+  --color rose_gold \
+  --style circles \
+  --logo logos/monogram.png \
+  --size 1000
 ```
 
-**With logo:**
+### Web App (local)
 
 ```bash
-python generate_qr.py --url "https://yourwedding.com/rsvp" --logo "logos/your_logo.png"
+# Terminal 1 — API
+pip install -r requirements-api.txt
+uvicorn api.main:app --reload
+
+# Terminal 2 — Frontend
+cd frontend
+npm install
+npm run dev
 ```
 
-**Custom color:**
+Open http://localhost:3000
 
-```bash
-python generate_qr.py --url "https://yourwedding.com/rsvp" --color rose_gold
+### Python API
+
+```python
+import sys; sys.path.insert(0, "src")
+from qr_generator import WeddingQRGenerator
+from models import QRRequest
+
+generator = WeddingQRGenerator()
+
+result = generator.generate(QRRequest(
+    data="https://yourwedding.com/rsvp",
+    color="navy",
+    style="circles",
+    size=1000,
+))
+
+with open("qr.png", "wb") as f:
+    f.write(result.image_bytes)
 ```
 
-## 🎨 Color Presets
+## Color Presets
 
-| Name         | Hex     | Description        |
-| ------------ | ------- | ------------------ |
-| `navy`       | #445E7C | Classic navy blue  |
-| `gold`       | #D4AF37 | Elegant gold       |
-| `rose_gold`  | #B76E79 | Romantic rose gold |
-| `burgundy`   | #800020 | Deep burgundy      |
-| `sage`       | #9CAF88 | Soft sage green    |
-| `dusty_blue` | #8BA9C2 | Dusty blue         |
-| `black`      | #000000 | Classic black      |
-| `charcoal`   | #36454F | Soft charcoal      |
+| Name         | Hex     |
+| ------------ | ------- |
+| `navy`       | #445E7C |
+| `gold`       | #D4AF37 |
+| `rose_gold`  | #B76E79 |
+| `burgundy`   | #800020 |
+| `sage`       | #9CAF88 |
+| `dusty_blue` | #8BA9C2 |
+| `black`      | #000000 |
+| `charcoal`   | #36454F |
 
-You can also use any hex color: `--color "#FF5733"`
+## Dot Styles
 
-## 📖 All Options
+| Style     | Description                        |
+| --------- | ---------------------------------- |
+| `circles` | Smooth antialiased circles         |
+| `rounded` | Rounded squares (30% corner radius)|
+| `diamond` | 45-degree rotated squares          |
+| `square`  | Clean sharp-edged squares          |
+
+## CLI Options
 
 ```
 python generate_qr.py --help
 
 Options:
-  --url, -u         URL or text to encode (required)
-  --output, -o      Output file path (default: output/wedding_qr.png)
-  --logo, -l        Path to logo image
-  --color, -c       Color preset or hex code (default: navy)
-  --background, -bg Background color hex (default: #FFFFFF)
-  --size, -s        Output size in pixels (default: 1000)
-  --logo-size, -ls  Logo size ratio 0.2-0.3 (default: 0.25)
-  --style           circles or rounded (default: circles)
-  --error-correction L/M/Q/H (default: H)
+  --url, -u              URL or text to encode (required)
+  --output, -o           Output file path (default: auto-numbered)
+  --logo, -l             Path to logo image
+  --color, -c            Color preset or hex code (default: navy)
+  --background, -bg      Background color hex (default: #FFFFFF)
+  --size, -s             Output size in pixels (default: 1000)
+  --logo-size, -ls       Logo size ratio (default: 0.25)
+  --logo-padding, -lp    Padding around logo (default: 0.03)
+  --style                circles, rounded, diamond, square (default: circles)
+  --error-correction, -ec  L/M/Q/H (default: H)
+  --dot-size, -ds        Dot size ratio 0.5-1.2 (default: 0.9)
+  --version, -v          QR version 1-40 (default: auto)
 ```
 
-## 🔧 Python API Usage
+## API Endpoints
 
-```python
-from src.qr_generator import WeddingQRGenerator
+| Method | Path                     | Description              |
+| ------ | ------------------------ | ------------------------ |
+| POST   | `/api/generate`          | Generate QR (multipart form, supports logo file upload) |
+| GET    | `/api/generate/preview`  | 500px preview via query params |
+| GET    | `/api/presets`           | Color preset map         |
+| GET    | `/api/health`            | Health check             |
+| POST   | `/api/webhook/lemon-squeezy` | Payment webhook     |
+| GET    | `/api/verify/{order_id}` | Payment verification     |
 
-generator = WeddingQRGenerator()
-
-# Basic QR code
-generator.generate(
-    data="https://yourwedding.com/rsvp",
-    output_path="output/my_qr.png",
-    color="navy",
-    style="circles"
-)
-
-# With logo
-generator.generate(
-    data="https://yourwedding.com/rsvp",
-    output_path="output/my_qr_logo.png",
-    logo_path="logos/monogram.png",
-    color="rose_gold",
-    logo_size_ratio=0.25
-)
-```
-
-## 💡 Tips for Best Results
-
-1. **Error Correction**: Use `H` (default) when adding a logo - this allows up to 30% of the QR code to be covered
-2. **Logo Size**: Keep between 20-25% of QR size for reliable scanning
-3. **Contrast**: Ensure good contrast between QR code color and background
-4. **Test First**: Always test with your phone camera before printing!
-5. **Resolution**: Use at least 1000px for print quality
-
-## 📂 Folder Structure
+## Project Structure
 
 ```
 QR Code generator/
-├── generate_qr.py      # Main entry point (CLI)
-├── requirements.txt    # Python dependencies
-├── README.md          # This file
+├── generate_qr.py          # CLI entry point
+├── config.json              # Default CLI settings
+├── requirements.txt         # Core dependencies (qrcode, Pillow)
+├── requirements-api.txt     # API dependencies (FastAPI, uvicorn, httpx)
+├── .env.example             # Environment variable template
 ├── src/
-│   ├── __init__.py
-│   └── qr_generator.py # Core QR generation logic
-├── logos/             # Place your logo images here
-└── output/            # Generated QR codes saved here
+│   ├── qr_generator.py      # Core QR engine (drawers, generator)
+│   └── models.py            # QRRequest / QRResult dataclasses
+├── api/
+│   ├── main.py              # FastAPI app, CORS, router wiring
+│   ├── routes.py            # QR generation endpoints
+│   ├── dependencies.py      # Generator singleton, rate limiter
+│   ├── payment.py           # Lemon Squeezy integration, OrderCache
+│   ├── webhook.py           # HMAC-verified webhook handler
+│   └── verify.py            # Payment verification polling endpoint
+├── frontend/
+│   ├── src/app/             # Next.js pages (home, examples, pricing)
+│   ├── src/components/      # React components (configurator, preview, etc.)
+│   └── src/lib/             # API client, payment client
+├── deploy/
+│   ├── Dockerfile.api       # Python API container
+│   ├── Dockerfile.frontend  # Next.js build → nginx
+│   ├── docker-compose.yml   # Two-service stack
+│   └── nginx.conf           # Reverse proxy config
+├── tests/
+│   ├── test_qr_generator.py # Core engine + concurrency tests
+│   ├── test_api.py          # API endpoint tests
+│   └── test_payment.py      # Payment/cache tests
+├── docs/
+│   └── etsy-listing.md      # Demand validation artifact
+├── logos/                    # Logo assets
+└── output/                   # Generated QR codes
 ```
 
-## 🔬 How QR Codes Work
+## Tests
 
-QR (Quick Response) codes store data in a 2D matrix of dark and light modules:
+```bash
+python -m pytest tests/ -v    # All tests (33 passing)
+python -m pytest tests/test_qr_generator.py  # Core engine
+python -m pytest tests/test_api.py           # API endpoints
+python -m pytest tests/test_payment.py       # Payment/cache
+```
 
-1. **Finder Patterns**: The three large squares in corners help scanners locate and orient the code
-2. **Data Encoding**: Your URL/text is converted to binary and encoded in the pattern
-3. **Error Correction**: Redundant data allows reading even if partially damaged/obscured
-   - Level L: ~7% recovery
-   - Level M: ~15% recovery
-   - Level Q: ~25% recovery
-   - Level H: ~30% recovery (best for logos!)
+## Deployment
 
-The error correction is what allows us to place a logo in the center - the scanner can reconstruct the hidden data from the redundant information!
+```bash
+cp .env.example .env   # Fill in Lemon Squeezy keys
+cd deploy
+docker-compose up --build
+```
 
-## 📝 License
+Serves frontend on port 80/443 via nginx, API on port 8000 via uvicorn.
 
-MIT License - Free to use for your wedding! 💒
+## Tips
+
+- Use error correction **H** (default) when adding a logo — allows up to 30% obstruction
+- Keep logo size ratio between 0.20–0.25 for reliable scanning
+- Test with your phone camera before printing
+- 500px is sufficient for screens; use 1000px+ for print
+
+## License
+
+MIT
