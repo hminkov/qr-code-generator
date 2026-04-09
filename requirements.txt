@@ -1,0 +1,4 @@
+# QR Code Generator Dependencies
+qrcode[pil]==7.4.2
+Pillow>=10.0.0
+

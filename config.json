@@ -1,0 +1,22 @@
+{
+  "url": "https://www.zola.com/wedding/wedding-1765133983490",
+  "color": "navy",
+  "background": "#FFFFFF",
+  "size": 2000,
+  "style": "circles",
+
+  "_comment_error": "Error correction: L=sparse, M=medium (for small logo), H=dense (for larger logo)",
+  "error_correction": "M",
+
+  "_comment_dot_size": "Dot size: 0.5=small gaps, 0.9=default, 1.0=touching, 1.1-1.3=larger",
+  "dot_size": 1.0,
+
+  "_comment_version": "Density: null=auto, lower=sparser",
+  "version": null,
+
+  "_comment_logo": "Logo settings (only applies when logo is set)",
+  "logo": "logos/logo.png",
+  "logo_size_ratio": 0.25,
+  "_comment_logo_padding": "Gap between logo and dots: 0.02=tight, 0.05=normal, 0.08=wide",
+  "logo_padding": 0.05
+}
